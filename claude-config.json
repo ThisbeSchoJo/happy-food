@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "happy-food": {
+      "command": "node",
+      "args": [
+        "/Users/thisbescholfield-johnson/Development/code/2025/happy-food/build/index.js"
+      ],
+      "env": {
+        "USDA_API_KEY": "DaE4Ljcov428VPj5A9930A2eZ0u4cFkMv9UdUt05"
+      }
+    }
+  }
+}
