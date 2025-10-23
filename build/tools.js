@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { searchFoods } from './usda-api.js';
-import { foodMoodDatabase } from './database.js';
-import { validateAndSanitizeInput, calculateMatchConfidence } from './validation.js';
+import { searchFoods } from "./usda-api.js";
+import { foodMoodDatabase } from "./database.js";
+import { validateAndSanitizeInput, calculateMatchConfidence, } from "./validation.js";
 export function registerFoodTools(server) {
     // Search for food matches tool
     server.tool("search-food-matches", "Search for food matches in the USDA database and return the best matches for user confirmation", {

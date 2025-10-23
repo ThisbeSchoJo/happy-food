@@ -1,7 +1,10 @@
 // Input validation and sanitization utilities
 export function validateAndSanitizeInput(input) {
     if (!input || typeof input !== "string" || input.trim().length === 0) {
-        return { isValid: false, error: "Please provide a valid food name to search for." };
+        return {
+            isValid: false,
+            error: "Please provide a valid food name to search for.",
+        };
     }
     const sanitized = input.trim().toLowerCase();
     // Check for suspicious patterns
@@ -30,15 +33,13 @@ export function validateAndSanitizeInput(input) {
     if (isSuspicious) {
         return {
             isValid: false,
-            error: `Sorry, "${input}" doesn't appear to be a real food. Please try asking about actual foods like "banana", "apple", "chicken", "rice", etc.`
+            error: `Sorry, "${input}" doesn't appear to be a real food. Please try asking about actual foods like "banana", "apple", "chicken", "rice", etc.`,
         };
     }
     return { isValid: true, sanitized };
 }
 export function calculateMatchConfidence(searchTerm, foodName) {
-    const searchWords = searchTerm
-        .split(" ")
-        .filter((word) => word.length > 2);
+    const searchWords = searchTerm.split(" ").filter((word) => word.length > 2);
     let confidence = 0;
     // Exact match gets highest score
     if (foodName.includes(searchTerm)) {
