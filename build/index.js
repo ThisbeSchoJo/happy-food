@@ -13,11 +13,39 @@ const server = new McpServer({
 // USDA API configuration
 const USDA_API_KEY = process.env.USDA_API_KEY || "DaE4Ljcov428VPj5A9930A2eZ0u4cFkMv9UdUt05"; // Replace with your actual API key
 const USDA_API_BASE = "https://api.nal.usda.gov/fdc/v1";
-// Helper function for making USDA API requests
+// Validate configuration on startup
+if (!USDA_API_KEY || USDA_API_KEY === "DEMO_KEY") {
+    console.warn("⚠️  Warning: Using demo API key. Set USDA_API_KEY environment variable for production.");
+}
+// Rate limiting protection
+const requestQueue = [];
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10;
 async function makeUSDARequest(endpoint) {
+    const now = Date.now();
+    // Clean old requests from queue
+    while (requestQueue.length > 0 && requestQueue[0] < now - RATE_LIMIT_WINDOW) {
+        requestQueue.shift();
+    }
+    // Check rate limit
+    if (requestQueue.length >= MAX_REQUESTS_PER_WINDOW) {
+        console.error("Rate limit exceeded for USDA API");
+        return null;
+    }
+    // Add current request to queue
+    requestQueue.push(now);
     const url = `${USDA_API_BASE}${endpoint}&api_key=${USDA_API_KEY}`;
     try {
-        const response = await fetch(url);
+        // Add timeout to prevent hanging requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const response = await fetch(url, {
+            signal: controller.signal,
+            headers: {
+                'User-Agent': 'Happy-Food-MCP-Server/1.0.0'
+            }
+        });
+        clearTimeout(timeoutId);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -26,7 +54,7 @@ async function makeUSDARequest(endpoint) {
     catch (error) {
         console.error("Error making USDA request:", error);
         // Log to stderr for production monitoring
-        console.error(`USDA API Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error(`USDA API Error: ${error instanceof Error ? error.message : "Unknown error"}`);
         return null;
     }
 }
@@ -97,6 +125,19 @@ const foodMoodDatabase = {
 server.tool("search-food-matches", "Search for food matches in the USDA database and return the best matches for user confirmation", {
     food: z.string().describe("Name of the food to search for"),
 }, async ({ food }) => {
+    // Input validation and sanitization
+    if (!food || typeof food !== 'string' || food.trim().length === 0) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: "Please provide a valid food name to search for.",
+                },
+            ],
+        };
+    }
+    // Sanitize input
+    const sanitizedFood = food.trim().toLowerCase();
     // Validate that the input looks like a real food using context analysis
     const suspiciousPatterns = [
         // Clearly non-food combinations
@@ -331,7 +372,7 @@ server.tool("health-check", "Check the health status of the MCP server and USDA 
                     text: `🏥 **Happy Food MCP Server Health Check**
 
 **Status:** ✅ Healthy
-**USDA API:** ${isUSDAHealthy ? '✅ Connected' : '❌ Disconnected'}
+**USDA API:** ${isUSDAHealthy ? "✅ Connected" : "❌ Disconnected"}
 **Local Database:** ✅ ${localDbCount} foods available
 **Server Version:** 1.0.0
 **Timestamp:** ${new Date().toISOString()}`,
@@ -347,7 +388,7 @@ server.tool("health-check", "Check the health status of the MCP server and USDA 
                     text: `🏥 **Happy Food MCP Server Health Check**
 
 **Status:** ⚠️ Degraded
-**USDA API:** ❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}
+**USDA API:** ❌ Error: ${error instanceof Error ? error.message : "Unknown error"}
 **Local Database:** ✅ Available
 **Server Version:** 1.0.0
 **Timestamp:** ${new Date().toISOString()}`,
@@ -356,50 +397,6 @@ server.tool("health-check", "Check the health status of the MCP server and USDA 
         };
     }
 });
-// Register weather tools
-// server.tool(
-//     "get-alerts",
-//     "Get weather alerts for a state",
-//     {
-//       state: z.string().length(2).describe("Two-letter state code (e.g. CA, NY)"),
-//     },
-//     async ({ state }) => {
-//       const stateCode = state.toUpperCase();
-//       const alertsUrl = `${NWS_API_BASE}/alerts?area=${stateCode}`;
-//       const alertsData = await makeNWSRequest<AlertsResponse>(alertsUrl);
-//       if (!alertsData) {
-//         return {
-//           content: [
-//             {
-//               type: "text",
-//               text: "Failed to retrieve alerts data",
-//             },
-//           ],
-//         };
-//       }
-//       const features = alertsData.features || [];
-//       if (features.length === 0) {
-//         return {
-//           content: [
-//             {
-//               type: "text",
-//               text: `No active alerts for ${stateCode}`,
-//             },
-//           ],
-//         };
-//       }
-//       const formattedAlerts = features.map(formatAlert);
-//       const alertsText = `Active alerts for ${stateCode}:\n\n${formattedAlerts.join("\n")}`;
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: alertsText,
-//           },
-//         ],
-//       };
-//     },
-//   );
 server.tool("get-food-nutrition", "Get detailed nutritional information for a specific food", {
     food: z.string().describe("Name of the food to get nutritional data for"),
 }, async ({ food }) => {
@@ -413,82 +410,6 @@ server.tool("get-food-nutrition", "Get detailed nutritional information for a sp
         ],
     };
 });
-// server.tool(
-//   "get-forecast",
-//   "Get weather forecast for a location",
-//   {
-//     latitude: z.number().min(-90).max(90).describe("Latitude of the location"),
-//     longitude: z.number().min(-180).max(180).describe("Longitude of the location"),
-//   },
-//   async ({ latitude, longitude }) => {
-//     // Get grid point data
-//     const pointsUrl = `${NWS_API_BASE}/points/${latitude.toFixed(4)},${longitude.toFixed(4)}`;
-//     const pointsData = await makeNWSRequest<PointsResponse>(pointsUrl);
-//     if (!pointsData) {
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: `Failed to retrieve grid point data for coordinates: ${latitude}, ${longitude}. This location may not be supported by the NWS API (only US locations are supported).`,
-//           },
-//         ],
-//       };
-//     }
-//     const forecastUrl = pointsData.properties?.forecast;
-//     if (!forecastUrl) {
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: "Failed to get forecast URL from grid point data",
-//           },
-//         ],
-//       };
-//     }
-//     // Get forecast data
-//     const forecastData = await makeNWSRequest<ForecastResponse>(forecastUrl);
-//     if (!forecastData) {
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: "Failed to retrieve forecast data",
-//           },
-//         ],
-//       };
-//     }
-//     const periods = forecastData.properties?.periods || [];
-//     if (periods.length === 0) {
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: "No forecast periods available",
-//           },
-//         ],
-//       };
-//     }
-//     // Format forecast periods
-//     const formattedForecast = periods.map((period: ForecastPeriod) =>
-//       [
-//         `${period.name || "Unknown"}:`,
-//         `Temperature: ${period.temperature || "Unknown"}°${period.temperatureUnit || "F"}`,
-//         `Wind: ${period.windSpeed || "Unknown"} ${period.windDirection || ""}`,
-//         `${period.shortForecast || "No forecast available"}`,
-//         "---",
-//       ].join("\n"),
-//     );
-//     const forecastText = `Forecast for ${latitude}, ${longitude}:\n\n${formattedForecast.join("\n")}`;
-//     return {
-//       content: [
-//         {
-//           type: "text",
-//           text: forecastText,
-//         },
-//       ],
-//     };
-//   },
-// );
 async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
