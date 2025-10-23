@@ -1,4 +1,33 @@
-// Local food mood database for testing
+/**
+ * Local Food Mood Database
+ *
+ * This module contains a curated database of foods with detailed mood analysis.
+ * It serves as a fallback when USDA API data is unavailable and provides
+ * comprehensive mood effects based on nutritional content and neurotransmitter impact.
+ *
+ * The database is organized by food categories and includes:
+ * - Detailed nutritional information
+ * - Mood effects based on scientific research
+ * - Neurotransmitter impact analysis
+ * - Gut-brain axis considerations
+ */
+/**
+ * Curated food mood database with comprehensive analysis
+ *
+ * This database contains 22 carefully selected foods across 8 categories,
+ * each with detailed nutritional data, mood effects, and neurotransmitter impact.
+ *
+ * Categories included:
+ * - Caffeinated beverages (coffee, tea, matcha)
+ * - Fruits (banana, blueberries, avocado)
+ * - Nuts and seeds (almonds, walnuts, pumpkin seeds)
+ * - Vegetables (spinach, sweet potato)
+ * - Proteins (salmon, eggs)
+ * - Grains (oats, quinoa)
+ * - Fermented foods (yogurt, kimchi)
+ * - Herbs and spices (turmeric, ginger)
+ * - Comfort foods (dark chocolate, chicken soup, honey)
+ */
 export const foodMoodDatabase = {
     // Caffeinated beverages
     "matcha latte with oat milk": {
@@ -21,7 +50,7 @@ export const foodMoodDatabase = {
             gaba: "enhanced",
         },
     },
-    "coffee": {
+    coffee: {
         nutrients: {
             caffeine: 95, // mg
             chlorogenicAcid: 200, // mg
@@ -82,7 +111,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "blueberries": {
+    blueberries: {
         nutrients: {
             anthocyanins: 120, // mg
             vitaminC: 14, // mg
@@ -102,7 +131,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "avocado": {
+    avocado: {
         nutrients: {
             healthyFats: 15, // g
             fiber: 7, // g
@@ -123,7 +152,7 @@ export const foodMoodDatabase = {
         },
     },
     // Nuts and seeds
-    "almonds": {
+    almonds: {
         nutrients: {
             magnesium: 76, // mg
             vitaminE: 7.3, // mg
@@ -143,7 +172,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "walnuts": {
+    walnuts: {
         nutrients: {
             omega3: 2.5, // g
             protein: 4, // g
@@ -184,7 +213,7 @@ export const foodMoodDatabase = {
         },
     },
     // Vegetables
-    "spinach": {
+    spinach: {
         nutrients: {
             folate: 58, // mcg
             iron: 2.7, // mg
@@ -225,7 +254,7 @@ export const foodMoodDatabase = {
         },
     },
     // Proteins
-    "salmon": {
+    salmon: {
         nutrients: {
             omega3: 1.8, // g
             protein: 25, // g
@@ -245,7 +274,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "eggs": {
+    eggs: {
         nutrients: {
             protein: 6, // g
             choline: 147, // mg
@@ -266,7 +295,7 @@ export const foodMoodDatabase = {
         },
     },
     // Grains
-    "oats": {
+    oats: {
         nutrients: {
             fiber: 4, // g
             protein: 5, // g
@@ -286,7 +315,7 @@ export const foodMoodDatabase = {
             gaba: "enhanced",
         },
     },
-    "quinoa": {
+    quinoa: {
         nutrients: {
             protein: 8, // g
             fiber: 5, // g
@@ -327,7 +356,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "kimchi": {
+    kimchi: {
         nutrients: {
             probiotics: "very high",
             vitaminC: 18, // mg
@@ -348,7 +377,7 @@ export const foodMoodDatabase = {
         },
     },
     // Herbs and spices
-    "turmeric": {
+    turmeric: {
         nutrients: {
             curcumin: 200, // mg
             antioxidants: "very high",
@@ -368,7 +397,7 @@ export const foodMoodDatabase = {
             dopamine: "moderate increase",
         },
     },
-    "ginger": {
+    ginger: {
         nutrients: {
             gingerol: 50, // mg
             antioxidants: "high",
@@ -433,7 +462,7 @@ export const foodMoodDatabase = {
             gaba: "enhanced",
         },
     },
-    "honey": {
+    honey: {
         nutrients: {
             antioxidants: "high",
             glucose: 17, // g
