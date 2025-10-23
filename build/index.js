@@ -1,8 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-// const NWS_API_BASE = "https://api.food.gov";
-// const USER_AGENT = "happy-food-app/1.0";
 // Create server instance
 const server = new McpServer({
     name: "happy-food",
@@ -12,23 +10,6 @@ const server = new McpServer({
         tools: {},
     },
 });
-// Helper function for making NWS API requests
-// async function makeNWSRequest<T>(url: string): Promise<T | null> {
-//     const headers = {
-//       "User-Agent": USER_AGENT,
-//       Accept: "application/geo+json",
-//     };
-//     try {
-//       const response = await fetch(url, { headers });
-//       if (!response.ok) {
-//         throw new Error(`HTTP error! status: ${response.status}`);
-//       }
-//       return (await response.json()) as T;
-//     } catch (error) {
-//       console.error("Error making NWS request:", error);
-//       return null;
-//     }
-//   }
 // USDA API configuration
 const USDA_API_KEY = process.env.USDA_API_KEY || "DaE4Ljcov428VPj5A9930A2eZ0u4cFkMv9UdUt05"; // Replace with your actual API key
 const USDA_API_BASE = "https://api.nal.usda.gov/fdc/v1";
@@ -44,6 +25,8 @@ async function makeUSDARequest(endpoint) {
     }
     catch (error) {
         console.error("Error making USDA request:", error);
+        // Log to stderr for production monitoring
+        console.error(`USDA API Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         return null;
     }
 }
@@ -110,49 +93,157 @@ const foodMoodDatabase = {
         },
     },
 };
-// interface AlertFeature {
-//   properties: {
-//     event?: string;
-//     areaDesc?: string;
-//     severity?: string;
-//     status?: string;
-//     headline?: string;
-//   };
-// }
-// // Format alert data
-// function formatAlert(feature: AlertFeature): string {
-//   const props = feature.properties;
-//   return [
-//     `Event: ${props.event || "Unknown"}`,
-//     `Area: ${props.areaDesc || "Unknown"}`,
-//     `Severity: ${props.severity || "Unknown"}`,
-//     `Status: ${props.status || "Unknown"}`,
-//     `Headline: ${props.headline || "No headline"}`,
-//     "---",
-//   ].join("\n");
-// }
-// interface ForecastPeriod {
-//   name?: string;
-//   temperature?: number;
-//   temperatureUnit?: string;
-//   windSpeed?: string;
-//   windDirection?: string;
-//   shortForecast?: string;
-// }
-// interface AlertsResponse {
-//   features: AlertFeature[];
-// }
-// interface PointsResponse {
-//   properties: {
-//     forecast?: string;
-//   };
-// }
-// interface ForecastResponse {
-//   properties: {
-//     periods: ForecastPeriod[];
-//   };
-// }
 // Register food tools
+server.tool("search-food-matches", "Search for food matches in the USDA database and return the best matches for user confirmation", {
+    food: z.string().describe("Name of the food to search for"),
+}, async ({ food }) => {
+    // Validate that the input looks like a real food using context analysis
+    const suspiciousPatterns = [
+        // Clearly non-food combinations
+        /unicorn\s+(food|meat|flesh)/i,
+        /gargoyle\s+(claws|wings|scales)/i,
+        /dragon\s+(claws|wings|scales|blood)/i,
+        /fairy\s+(dust|wings|magic)/i,
+        /earwax/i,
+        /hooves/i,
+        /poop/i,
+        /poo/i,
+        /pee/i,
+        /urine/i,
+        /blood\s+(alone|drink)/i,
+        /flesh\s+(alone|raw)/i,
+        /rock\s+(alone|hard)/i,
+        /stone\s+(alone|hard)/i,
+        /metal\s+(alone|hard)/i,
+        /plastic\s+(alone|hard)/i,
+        /glass\s+(alone|hard)/i,
+        /wood\s+(alone|hard)/i,
+    ];
+    const isSuspiciousNonFood = suspiciousPatterns.some((pattern) => pattern.test(food));
+    if (isSuspiciousNonFood) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Sorry, "${food}" doesn't appear to be a real food. Please try asking about actual foods like "banana", "apple", "chicken", "rice", etc.`,
+                },
+            ],
+        };
+    }
+    // Search USDA API for matches
+    const searchEndpoint = `/foods/search?query=${encodeURIComponent(food)}&pageSize=5`;
+    const searchData = await makeUSDARequest(searchEndpoint);
+    if (searchData && searchData.foods && searchData.foods.length > 0) {
+        // Calculate confidence for each match
+        const matches = searchData.foods.map((foodItem) => {
+            const foodName = foodItem.description?.toLowerCase() || "";
+            const searchTerm = food.toLowerCase();
+            const searchWords = searchTerm
+                .split(" ")
+                .filter((word) => word.length > 2);
+            let confidence = 0;
+            // Exact match gets highest score
+            if (foodName.includes(searchTerm)) {
+                confidence += 50;
+            }
+            // Word-by-word matching with fuzzy tolerance
+            searchWords.forEach((word) => {
+                if (foodName.includes(word)) {
+                    confidence += 20; // Exact word match
+                }
+                else {
+                    // Fuzzy matching for typos (allows 1-2 character differences)
+                    const fuzzyMatch = foodName
+                        .split(" ")
+                        .some((foodWord) => {
+                        if (Math.abs(word.length - foodWord.length) > 2)
+                            return false;
+                        // Simple Levenshtein-like distance check
+                        let differences = 0;
+                        const minLength = Math.min(word.length, foodWord.length);
+                        for (let i = 0; i < minLength; i++) {
+                            if (word[i] !== foodWord[i])
+                                differences++;
+                        }
+                        differences += Math.abs(word.length - foodWord.length);
+                        return differences <= 2; // Allow up to 2 character differences
+                    });
+                    if (fuzzyMatch) {
+                        confidence += 10; // Fuzzy match
+                    }
+                }
+            });
+            // Bonus for common food indicators
+            const foodIndicators = [
+                "food",
+                "fruit",
+                "vegetable",
+                "meat",
+                "dairy",
+                "grain",
+                "nut",
+                "seed",
+                "spice",
+                "herb",
+            ];
+            if (foodIndicators.some((indicator) => foodName.includes(indicator))) {
+                confidence += 5;
+            }
+            return {
+                name: foodItem.description,
+                confidence: confidence,
+                fdcId: foodItem.fdcId,
+            };
+        });
+        // Sort by confidence and return top matches
+        const sortedMatches = matches
+            .filter((match) => match.confidence >= 15)
+            .sort((a, b) => b.confidence - a.confidence)
+            .slice(0, 3);
+        if (sortedMatches.length === 0) {
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: `No good matches found for "${food}". Please try a different food name or check the spelling.`,
+                    },
+                ],
+            };
+        }
+        const matchList = sortedMatches
+            .map((match, index) => `${index + 1}. ${match.name} (confidence: ${match.confidence}%)`)
+            .join("\n");
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Found ${sortedMatches.length} potential matches for "${food}":\n\n${matchList}\n\nPlease use the "get-food-mood-effects" tool with the exact food name you want to analyze.`,
+                },
+            ],
+        };
+    }
+    // Fallback to local database
+    const foodData = foodMoodDatabase[food.toLowerCase()];
+    if (!foodData) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `Sorry, I couldn't find "${food}" in the USDA database or my local database. Try: "matcha latte with oat milk", "banana", or "dark chocolate"`,
+                },
+            ],
+        };
+    }
+    // Return local database match
+    return {
+        content: [
+            {
+                type: "text",
+                text: `Found "${food}" in local database. Use "get-food-mood-effects" to get the full analysis.`,
+            },
+        ],
+    };
+});
 server.tool("get-food-mood-effects", "Get mood effects of a specific food based on its nutritional content", {
     food: z.string().describe("Name of the food to analyze"),
 }, async ({ food }) => {
@@ -194,7 +285,7 @@ ${keyNutrients.map((n) => `• ${n.name}: ${n.amount} ${n.unit}`).join("\n")}
             content: [
                 {
                     type: "text",
-                    text: `Sorry, I couldn't find "${food}" in the USDA database or my local database. Try: "matcha latte with oat milk", "banana", or "dark chocolate"`,
+                    text: `Sorry, I couldn't find "${food}" in the USDA database or my local database. Try using "search-food-matches" first to find the right food name.`,
                 },
             ],
         };
@@ -224,6 +315,46 @@ ${Object.entries(foodData.neurotransmitters)
             },
         ],
     };
+});
+// Health check tool for production monitoring
+server.tool("health-check", "Check the health status of the MCP server and USDA API connectivity", {}, async () => {
+    try {
+        // Test USDA API connectivity
+        const testEndpoint = `/foods/search?query=test&pageSize=1`;
+        const testResponse = await makeUSDARequest(testEndpoint);
+        const isUSDAHealthy = testResponse !== null;
+        const localDbCount = Object.keys(foodMoodDatabase).length;
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `🏥 **Happy Food MCP Server Health Check**
+
+**Status:** ✅ Healthy
+**USDA API:** ${isUSDAHealthy ? '✅ Connected' : '❌ Disconnected'}
+**Local Database:** ✅ ${localDbCount} foods available
+**Server Version:** 1.0.0
+**Timestamp:** ${new Date().toISOString()}`,
+                },
+            ],
+        };
+    }
+    catch (error) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: `🏥 **Happy Food MCP Server Health Check**
+
+**Status:** ⚠️ Degraded
+**USDA API:** ❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}
+**Local Database:** ✅ Available
+**Server Version:** 1.0.0
+**Timestamp:** ${new Date().toISOString()}`,
+                },
+            ],
+        };
+    }
 });
 // Register weather tools
 // server.tool(
